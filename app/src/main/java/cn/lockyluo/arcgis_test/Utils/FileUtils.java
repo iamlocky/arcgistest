@@ -1,4 +1,4 @@
-package cn.lockyluo.arcgis_test;
+package cn.lockyluo.arcgis_test.Utils;
 
 import android.annotation.SuppressLint;
 import android.content.ContentUris;
@@ -11,7 +11,7 @@ import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 
 /**
- * Created by BassXS on 2018/7/18.
+ * Created by LockyLuo on 2018/7/18.
  */
 
 public class FileUtils {

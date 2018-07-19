@@ -1,7 +1,7 @@
 package cn.lockyluo.arcgis_test.model;
 
 /**
- * Created by BassXS on 2018/7/18.
+ * Created by LockyLuo on 2018/7/18.
  */
 
 public class Geo {
@@ -13,7 +13,7 @@ public class Geo {
      */
 
     private double rotation;
-    private double scale;
+    private double scale=0;
     private TargetGeometryBean targetGeometry;
 
     public double getRotation() {
