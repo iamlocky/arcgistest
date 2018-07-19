@@ -450,17 +450,23 @@ public class MainActivity extends AppCompatActivity {
         super.onBackPressed();
     }
 
-//    @Override
-//    public boolean onKeyDown(int keyCode, KeyEvent event) {
-//        if (keyCode==KeyEvent.KEYCODE_BACK){
-//            if (popupWin!=null&&popupWin.isShowing())
-//            {
-//                popupWin.dismiss();
-//                return true;
-//            }
-//        }
-//        return super.onKeyDown(keyCode, event);
-//    }
+    @Override
+    protected void onResume() {
+        super.onResume();
+        sceneview.resume();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        sceneview.pause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        sceneview.dispose();
+    }
 
     @OnClick(R.id.btn_locate)
     public void onBtnLocateClicked() {
