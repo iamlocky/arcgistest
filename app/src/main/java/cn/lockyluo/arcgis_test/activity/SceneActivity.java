@@ -1,19 +1,14 @@
-package cn.lockyluo.arcgis_test;
+package cn.lockyluo.arcgis_test.activity;
 
-import android.Manifest;
 import android.content.ActivityNotFoundException;
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
+import android.os.Handler;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.AppCompatButton;
@@ -45,9 +40,13 @@ import com.esri.arcgisruntime.symbology.SimpleMarkerSymbol;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import java.io.File;
+
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
+import cn.lockyluo.arcgis_test.R;
+import cn.lockyluo.arcgis_test.Utils.ClipboardUtil;
 import cn.lockyluo.arcgis_test.Utils.FileUtils;
 import cn.lockyluo.arcgis_test.Utils.LocationUtils;
 import cn.lockyluo.arcgis_test.Utils.SharedPerfUtils;
@@ -57,7 +56,7 @@ import cn.lockyluo.arcgis_test.model.BaiduGeo;
 import cn.lockyluo.arcgis_test.model.ContextData;
 import cn.lockyluo.arcgis_test.model.Geo;
 
-public class MainActivity extends AppCompatActivity {
+public class SceneActivity extends AppCompatActivity {
     @BindView(R.id.sceneview)
     SceneView sceneview;
     @BindView(R.id.btn_select)
@@ -68,15 +67,12 @@ public class MainActivity extends AppCompatActivity {
     AppCompatButton btnSub;
     @BindView(R.id.btn_locate)
     AppCompatImageView btnLocate;
+
     private Context context;
-    private int requestCode = 0x00000011;
-    private String[] permssions = new String[]{
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.INTERNET,
-            Manifest.permission.ACCESS_FINE_LOCATION};
+
     private int FILE_SELECT_CODE = 0x00000101;
-    private static final String TAG = "MainActivity";
-    private String path = "";
+    private static final String TAG = "SceneActivity";
+    private String tpkPath = "";
     private Basemap basemap;
     private ArcGISScene scene;
     private ArcGISTiledLayer tiledLayer;
@@ -84,7 +80,7 @@ public class MainActivity extends AppCompatActivity {
     private Gson gson;
     private PopupWindow popupWin;
     private boolean onStart = true;
-    GraphicsOverlay graphicsOverlay;
+    private GraphicsOverlay graphicsOverlay;
     private Double latitude = 23.050644;
     private Double longitude = 113.393676;
     private String geoDetailInfo;
@@ -96,23 +92,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_sceneview);
         ButterKnife.bind(this);
         context = this;
-        requestPermission();
-        ArcGISRuntimeEnvironment.setLicense("runtimelite,1000,rud4163659509,none,1JPJD4SZ8L4HC2EN0229");
-        path = SharedPerfUtils.getString("path");
-        if (TextUtils.isEmpty(path)) {
+        setTitle(getString(R.string.sv));
+
+        ArcGISRuntimeEnvironment.setLicense(ContextData.arcLicense);
+        sceneview.setAttributionTextVisible(false);//去除水印，仅用于技术研究
+
+        tpkPath = SharedPerfUtils.getString("tpkPath");
+        if (TextUtils.isEmpty(tpkPath)) {
             loadDefault();
         } else {
             loadTpk();
         }
-        sceneview.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                Log.i(TAG, "onCreate: scale " + scale + " getScale" + getCurrentGeoPoint().getScale());
-            }
-        }, 1000);
 
 
         GsonBuilder gsonBuilder = new GsonBuilder();
@@ -137,20 +130,25 @@ public class MainActivity extends AppCompatActivity {
         sceneview.setOnTouchListener(new DefaultSceneViewOnTouchListener(sceneview) {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent motionEvent) {
-                if (popupWin!=null&&popupWin.isShowing()){
+                if (popupWin != null && popupWin.isShowing()) {
                     popupWin.dismiss();
                     return true;
                 }
 
                 android.graphics.Point screenPoint = new android.graphics.Point(Math.round(motionEvent.getX()), Math.round(motionEvent.getY()));
-                Point point = sceneview.screenToBaseSurface(screenPoint);
+                final Point point = sceneview.screenToBaseSurface(screenPoint);
                 String s = CoordinateFormatter.toLatitudeLongitude(point, CoordinateFormatter.LatitudeLongitudeFormat.DECIMAL_DEGREES, 4);
 
-                addPointToSurfaceView(point);
 
                 showPopup(s);
 
-                sceneview.setViewpoint(new Viewpoint(point.getY(), point.getX(), scale));
+                sceneview.setViewpointAsync(new Viewpoint(point.getY(), point.getX(), scale),0.3f).addDoneListener(new Runnable() {
+                    @Override
+                    public void run() {
+                        addPointToSurfaceView(point);
+
+                    }
+                });
                 return true;
             }
 
@@ -161,9 +159,14 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * 在指定坐标点添加标记
+     *
+     * @param point
+     */
     private void addPointToSurfaceView(Point point) {
-        latitude=point.getY();
-        longitude=point.getX();
+        latitude = point.getY();
+        longitude = point.getX();
         sceneview.getGraphicsOverlays().remove(graphicsOverlay);
         graphicsOverlay = new GraphicsOverlay();
         SimpleMarkerSymbol pointSymbol = new SimpleMarkerSymbol(SimpleMarkerSymbol.Style.CIRCLE, ContextCompat.getColor(context, R.color.colorPrimaryDark), 15);
@@ -173,23 +176,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 定位到指定位置，默认为广州大学城
+     * 定位视图到指定位置，默认为广州大学城
      *
      * @param latitudeAndLongitude
      */
     private void changeViewpoint(double... latitudeAndLongitude) {
-
         if (latitudeAndLongitude.length == 2) {
             latitude = latitudeAndLongitude[0];
             longitude = latitudeAndLongitude[1];
             Geo geo = getCurrentGeoPoint();
             if (geo != null) {
                 scale = geo.getScale();
+                addPointToSurfaceView(new Point(longitude, latitude));
+
             }
             scale = scale < 65536.0 ? scale : 65536.0;
         }
         if (!onStart) {
-            sceneview.setViewpointAsync(new Viewpoint(latitude, longitude, scale));
+            sceneview.setViewpointAsync(new Viewpoint(latitude, longitude, scale)).addDoneListener(new Runnable() {
+                @Override
+                public void run() {
+                }
+            });
         } else {
             onStart = false;
             sceneview.postDelayed(new Runnable() {
@@ -205,8 +213,10 @@ public class MainActivity extends AppCompatActivity {
 
 
     public void loadDefault() {//加载在线地图
+        String mapServer="https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
+
         tiledLayer = new ArcGISTiledLayer(
-                "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer");
+                mapServer);
         Basemap basemap = new Basemap(tiledLayer);
         scene = new ArcGISScene(basemap);
         scale = 65536.0;
@@ -215,12 +225,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void loadTpk() {//加载本地tpk地图
-        if (TextUtils.isEmpty(path))
+        if (TextUtils.isEmpty(tpkPath))
             return;
-        ToastUtils.show(path);
+        else if (!new File(tpkPath).exists())
+        {
+            ToastUtils.show("未找到tpk文件");
+            return;
+        }
+        ToastUtils.show(tpkPath);
         scale = 32270712.0;
-        SharedPerfUtils.putString("path", path);
-        TileCache tileCache = new TileCache(path);
+        SharedPerfUtils.putString("tpkPath", tpkPath);
+        TileCache tileCache = new TileCache(tpkPath);
         tiledLayer = new ArcGISTiledLayer(tileCache);
 
         basemap = new Basemap(tiledLayer);
@@ -230,27 +245,7 @@ public class MainActivity extends AppCompatActivity {
         changeViewpoint();
     }
 
-    public void requestPermission() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, permssions, requestCode);
-        }
-    }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == this.requestCode) {
-            for (int i = 0; i < permissions.length; i++) {
-                if (grantResults[i] == PackageManager.PERMISSION_GRANTED) {
-                    ToastUtils.show("权限" + permissions[i] + "申请成功");
-                } else {
-                    ToastUtils.show("权限" + permissions[i] + "申请失败");
-                }
-            }
-        }
-    }
 
     private void chooseFile() {
         ToastUtils.show("请选择");
@@ -271,11 +266,12 @@ public class MainActivity extends AppCompatActivity {
         } else if (requestCode == FILE_SELECT_CODE) {
             Uri uri = data.getData();
             try {
-                path = FileUtils.getPath(context, uri);
-                if (path.endsWith(".tpk")) {
+                tpkPath = FileUtils.getPath(context, uri);
+                if (tpkPath.endsWith(".tpk")) {
                     loadTpk();
                 } else {
                     ToastUtils.show("请选择tpk格式");
+                    tpkPath = "";
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -293,7 +289,6 @@ public class MainActivity extends AppCompatActivity {
     @OnClick(R.id.btn_add)
     public void onBtnAddClicked() {
         Geo geo = getCurrentGeoPoint();
-
         if (geo != null && geo.getTargetGeometry() != null) {
             scale = geo.getScale();
             scale /= 2;
@@ -312,7 +307,6 @@ public class MainActivity extends AppCompatActivity {
             scale *= 2;
 
             sceneview.setViewpointAsync(new Viewpoint(geo.getTargetGeometry().getY(), geo.getTargetGeometry().getX(), scale));
-            Log.i(TAG, "onBtnSubClicked: " + scale + "\n" + sceneview.getCurrentViewpoint(Viewpoint.Type.CENTER_AND_SCALE).toJson());
         }
     }
 
@@ -323,12 +317,12 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
         }
-
         return currentGeo;
     }
 
     /**
-     * 显示地址详情
+     * 显示地址详情popupwindow
+     *
      * @param title
      */
     public void showPopup(String title) {
@@ -357,51 +351,46 @@ public class MainActivity extends AppCompatActivity {
         tv1.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
-                ClipboardManager clipboardManager = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clipData = ClipData.newPlainText("坐标", tv1.getText().toString() + "");
-                clipboardManager.setPrimaryClip(clipData);
-                ToastUtils.show("已复制");
+                ClipboardUtil.putString("坐标", tv1.getText().toString());
+
                 return true;
             }
         });
         tv2.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
-                ClipboardManager clipboardManager = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clipData = ClipData.newPlainText("城市", tv2.getText().toString() + "");
-                clipboardManager.setPrimaryClip(clipData);
-                ToastUtils.show("已复制");
+                ClipboardUtil.putString("详情", tv2.getText().toString());
+
                 return true;
             }
         });
 
         popupWin.showAtLocation(sceneview.getRootView(), Gravity.BOTTOM, 0, 0);
 
-        Thread thread = new Thread(new Runnable() {//调用百度api获取坐标详细信息
+        Thread thread = new Thread(new Runnable() {
             @Override
             public void run() {
-
+                //调用百度api获取坐标详细信息
                 try {
                     Geo geo = getCurrentGeoPoint();
                     Double latitudeTemp = geo.getTargetGeometry().getY();
                     Double longitudeTemp = geo.getTargetGeometry().getX();
-                    latitude=latitudeTemp;
-                    longitude=longitudeTemp;
-                    Log.i(TAG, "run() returned: current " +latitudeTemp+" "+longitudeTemp+"\n"+
-                    latitude+" "+longitude);
-                    double y=0;
-                    double x=0;
-                    if (lastGeo!=null){
-                        y=latitudeTemp-lastGeo.getTargetGeometry().getY();
-                        x=longitudeTemp-lastGeo.getTargetGeometry().getX();
+                    latitude = latitudeTemp;
+                    longitude = longitudeTemp;
+//                    Log.i(TAG, "run() returned: current " + latitudeTemp + " " + longitudeTemp + "\n" +
+//                            latitude + " " + longitude);
+                    double y = 0;
+                    double x = 0;
+                    if (lastGeo != null) {
+                        y = latitudeTemp - lastGeo.getTargetGeometry().getY();
+                        x = longitudeTemp - lastGeo.getTargetGeometry().getX();
                     }
 
-                    if (Math.pow(y,2)<0.000001 &&
-                            Math.pow(x,2)<0.000001  &&
+                    if (Math.pow(y, 2) < 0.000001 &&
+                            Math.pow(x, 2) < 0.000001 &&
                             bean != null) {
-                        Log.i(TAG, "run: show cache geo "+Math.pow(y,2));//坐标变化较小时显示缓存
+                        Log.i(TAG, "run: show cache last geo");//坐标变化较小时跳过访问百度api，直接显示缓存
                     } else {
-
                         geoDetailInfo = UrlUtils.sendGetRequest(ContextData.bdGeoUrl
                                 .replace("666", ContextData.a)
                                 .replace("latitude", latitude.toString())
@@ -410,19 +399,18 @@ public class MainActivity extends AppCompatActivity {
                         bean = gson.fromJson(geoDetailInfo, BaiduGeo.class);
                     }
 
-                    if (currentGeo!=null){
-                        lastGeo=new Geo();
+                    if (currentGeo != null) {
+                        lastGeo = new Geo();
                         lastGeo.setTargetGeometry(currentGeo.getTargetGeometry());
                     }
 
-
-                    sceneview.post(new Runnable() {
+                    new Handler(getMainLooper()).post(new Runnable() {
                         @Override
                         public void run() {
                             if (tv2 != null) {
                                 StringBuffer stringBuffer = new StringBuffer();
-                                stringBuffer.append(bean.getResult().getFormatted_address()+" "+bean.getResult().getBusiness());
-                                if (bean.getResult().getPois().size() > 0) {
+                                stringBuffer.append(bean.getResult().getFormatted_address() + " " + bean.getResult().getBusiness());
+                                if (bean.getResult().getPois().size() > 0) {//取出百度数据中附近第一个地址
                                     stringBuffer.append("\n" +
                                             bean.getResult().getPois().get(0).getName() +
                                             "\n" +
@@ -469,13 +457,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @OnClick(R.id.btn_locate)
-    public void onBtnLocateClicked() {
+    public void onBtnLocateClicked() {//定位到本机位置
         Location location = LocationUtils.getLocation(context);
         if (location == null) {
             ToastUtils.show("位置获取失败");
             return;
         }
-        addPointToSurfaceView(new Point(location.getLongitude(), location.getLatitude()));
         changeViewpoint(location.getLatitude(), location.getLongitude());
     }
 

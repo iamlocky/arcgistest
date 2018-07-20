@@ -9,13 +9,14 @@ import android.content.Context;
 
 public class App extends Application {
     public static Application application;
+
     @Override
     public void onCreate() {
         super.onCreate();
-        application=this;
+        application = this;
     }
 
-    public static Context getInstance(){
-        return application.getBaseContext();
+    public static Context getInstance() {
+        return application;
     }
 }

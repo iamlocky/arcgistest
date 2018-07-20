@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">arcgis测试</string>
+    <string name="sv">SceneView测试</string>
+    <string name="mv">MapView测试</string>
 </resources>

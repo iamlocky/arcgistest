@@ -7,4 +7,5 @@
     <color name="gray">#939393</color>
     <color name="grayLight">#dad8d8</color>
     <color name="colorPrimaryLight">#4fb3ff</color>
+    <color name="backgroundColor">#8accff</color>
 </resources>

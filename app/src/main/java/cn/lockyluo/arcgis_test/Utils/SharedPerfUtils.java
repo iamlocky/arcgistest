@@ -10,14 +10,15 @@ import cn.lockyluo.arcgis_test.App;
  */
 
 public class SharedPerfUtils {
-    private static SharedPreferences preferences= App.getInstance().getSharedPreferences("cache", Context.MODE_PRIVATE);
-    public static void putString(String key,String value){
-        SharedPreferences.Editor editor=preferences.edit();
-        editor.putString(key,value);
+    private static SharedPreferences preferences = App.getInstance().getSharedPreferences("cache", Context.MODE_PRIVATE);
+
+    public static void putString(String key, String value) {
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString(key, value);
         editor.commit();
     }
 
-    public static String getString(String key){
-        return preferences.getString(key,"");
+    public static String getString(String key) {
+        return preferences.getString(key, "");
     }
 }

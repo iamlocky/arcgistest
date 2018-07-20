@@ -15,6 +15,12 @@ import java.util.List;
 
 public class LocationUtils {
     private static LocationManager locationManager;
+
+    /**
+     *
+     * @param context
+     * @return 当前的位置坐标
+     */
     public static Location getLocation(Context context){
          locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
         return beginLocation(context);
@@ -38,7 +44,6 @@ public class LocationUtils {
         String provider = judgeProvider(locationManager);
         //有位置提供器的情况
         if (provider != null) {
-            //为了压制getLastKnownLocation方法的警告
             if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
                     != PackageManager.PERMISSION_GRANTED
                     && ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)

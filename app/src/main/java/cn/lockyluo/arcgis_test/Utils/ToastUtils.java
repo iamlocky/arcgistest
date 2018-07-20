@@ -12,12 +12,13 @@ import cn.lockyluo.arcgis_test.App;
 public class ToastUtils {
     private static Toast toast;
     private static final String TAG = "ToastUtils";
-    public static void show(String s){
-        if (toast!=null) {
-        toast.cancel();
+
+    public static void show(String s) {
+        if (toast != null) {
+            toast.cancel();
         }
-        toast=Toast.makeText(App.getInstance(), s+"", Toast.LENGTH_SHORT);
+        toast = Toast.makeText(App.getInstance(), s + "", Toast.LENGTH_SHORT);
         toast.show();
-        Log.i(TAG, "show: "+s);
+        Log.i(TAG, "show: " + s);
     }
 }
