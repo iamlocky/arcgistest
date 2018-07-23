@@ -26,13 +26,18 @@ import android.widget.TextView;
 
 import com.esri.arcgisruntime.ArcGISRuntimeEnvironment;
 import com.esri.arcgisruntime.data.TileCache;
+import com.esri.arcgisruntime.data.VectorTileCache;
 import com.esri.arcgisruntime.geometry.CoordinateFormatter;
 import com.esri.arcgisruntime.geometry.Point;
 import com.esri.arcgisruntime.layers.ArcGISTiledLayer;
 import com.esri.arcgisruntime.mapping.ArcGISScene;
 import com.esri.arcgisruntime.mapping.Basemap;
+import com.esri.arcgisruntime.mapping.MobileMapPackage;
 import com.esri.arcgisruntime.mapping.Viewpoint;
 import com.esri.arcgisruntime.mapping.view.DefaultSceneViewOnTouchListener;
+import com.esri.arcgisruntime.mapping.view.DrawStatus;
+import com.esri.arcgisruntime.mapping.view.DrawStatusChangedEvent;
+import com.esri.arcgisruntime.mapping.view.DrawStatusChangedListener;
 import com.esri.arcgisruntime.mapping.view.Graphic;
 import com.esri.arcgisruntime.mapping.view.GraphicsOverlay;
 import com.esri.arcgisruntime.mapping.view.SceneView;
@@ -86,7 +91,6 @@ public class SceneActivity extends AppCompatActivity {
     private Double longitude = 113.393676;
     private String geoDetailInfo;
     private BaiduGeo bean;
-    private Geo lastGeo;
     private Geo currentGeo;
 
     private Double lastLatitude;
@@ -162,6 +166,17 @@ public class SceneActivity extends AppCompatActivity {
                 return super.onTouch(view, motionEvent);
             }
         });
+
+        sceneview.addDrawStatusChangedListener(new DrawStatusChangedListener() {
+            @Override
+            public void drawStatusChanged(DrawStatusChangedEvent drawStatusChangedEvent) {
+
+                if(drawStatusChangedEvent.getDrawStatus()== DrawStatus.COMPLETED){
+                    Log.d(TAG, "drawStatusChanged() :COMPLETED");
+                }else
+                    Log.d(TAG, "drawStatusChanged() :IN_PROGRESS");
+            }
+        });
     }
 
     /**
@@ -205,6 +220,7 @@ public class SceneActivity extends AppCompatActivity {
             });
         } else {
             onStart = false;
+
             sceneview.postDelayed(new Runnable() {
                 @Override
                 public void run() {
@@ -241,6 +257,7 @@ public class SceneActivity extends AppCompatActivity {
         scale = 32270712.0;
         SharedPerfUtils.putString("tpkPath", tpkPath);
         TileCache tileCache = new TileCache(tpkPath);
+
         tiledLayer = new ArcGISTiledLayer(tileCache);
 
         basemap = new Basemap(tiledLayer);
@@ -286,34 +303,7 @@ public class SceneActivity extends AppCompatActivity {
     }
 
 
-    @OnClick(R.id.btn_select)
-    public void onBtnSelectClicked() {
-        chooseFile();
-    }
 
-    @OnClick(R.id.btn_add)
-    public void onBtnAddClicked() {
-        Geo geo = getCurrentGeoPoint();
-        if (geo != null && geo.getTargetGeometry() != null) {
-            scale = geo.getScale();
-            scale /= 2;
-
-            sceneview.setViewpointAsync(new Viewpoint(geo.getTargetGeometry().getY(), geo.getTargetGeometry().getX(), scale));
-        }
-
-
-    }
-
-    @OnClick(R.id.btn_sub)
-    public void onBtnSubClicked() {
-        Geo geo = getCurrentGeoPoint();
-        if (geo != null && geo.getTargetGeometry() != null) {
-            scale = geo.getScale();
-            scale *= 2;
-
-            sceneview.setViewpointAsync(new Viewpoint(geo.getTargetGeometry().getY(), geo.getTargetGeometry().getX(), scale));
-        }
-    }
 
     public Geo getCurrentGeoPoint() {
         currentGeo = null;
@@ -381,8 +371,6 @@ public class SceneActivity extends AppCompatActivity {
                     latitude = geo.getTargetGeometry().getY();
                     longitude = geo.getTargetGeometry().getX();
 
-//                    Log.i(TAG, "run() returned: current " + latitudeTemp + " " + longitudeTemp + "\n" +
-//                            latitude + " " + longitude);
                     double y = 1;
                     double x = 1;
                     if (lastLatitude != null) {
@@ -434,6 +422,33 @@ public class SceneActivity extends AppCompatActivity {
         });
         thread.start();
 
+    }
+
+    @OnClick(R.id.btn_select)
+    public void onBtnSelectClicked() {
+        chooseFile();
+    }
+
+    @OnClick(R.id.btn_add)
+    public void onBtnAddClicked() {//放大
+        Geo geo = getCurrentGeoPoint();
+        if (geo != null && geo.getTargetGeometry() != null) {
+            scale = geo.getScale();
+            scale /= 2;
+
+            sceneview.setViewpointAsync(new Viewpoint(geo.getTargetGeometry().getY(), geo.getTargetGeometry().getX(), scale));
+        }
+    }
+
+    @OnClick(R.id.btn_sub)
+    public void onBtnSubClicked() {
+        Geo geo = getCurrentGeoPoint();
+        if (geo != null && geo.getTargetGeometry() != null) {
+            scale = geo.getScale();
+            scale *= 2;
+
+            sceneview.setViewpointAsync(new Viewpoint(geo.getTargetGeometry().getY(), geo.getTargetGeometry().getX(), scale));
+        }
     }
 
     @Override

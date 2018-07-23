@@ -37,6 +37,8 @@ import com.esri.arcgisruntime.mapping.view.BackgroundGrid;
 import com.esri.arcgisruntime.mapping.view.DefaultMapViewOnTouchListener;
 import com.esri.arcgisruntime.mapping.view.Graphic;
 import com.esri.arcgisruntime.mapping.view.GraphicsOverlay;
+import com.esri.arcgisruntime.mapping.view.MapScaleChangedEvent;
+import com.esri.arcgisruntime.mapping.view.MapScaleChangedListener;
 import com.esri.arcgisruntime.mapping.view.MapView;
 import com.esri.arcgisruntime.symbology.SimpleMarkerSymbol;
 import com.google.gson.Gson;
@@ -74,7 +76,7 @@ public class MapviewActivity extends AppCompatActivity {
 
     private Context context;
     private int FILE_SELECT_CODE = 0x00000102;
-    private static final String TAG = "SceneActivity";
+    private static final String TAG = "MapviewActivity";
     private String tpkPath = "";
     private Basemap basemap;
     private ArcGISMap map;
@@ -117,7 +119,6 @@ public class MapviewActivity extends AppCompatActivity {
             loadTpk();
         }
 
-
         GsonBuilder gsonBuilder = new GsonBuilder();
         gsonBuilder.serializeNulls().serializeSpecialFloatingPointValues();
         gson = gsonBuilder.create();
@@ -128,8 +129,7 @@ public class MapviewActivity extends AppCompatActivity {
     public void loadDefault() {//加载在线地图
         String mapServer = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
 
-        tiledLayer = new ArcGISTiledLayer(
-                mapServer);
+        tiledLayer = new ArcGISTiledLayer(mapServer);
         Basemap basemap = new Basemap(tiledLayer);
         map = new ArcGISMap(basemap);
         mapview.setMap(map);
@@ -151,7 +151,12 @@ public class MapviewActivity extends AppCompatActivity {
         basemap = new Basemap(tiledLayer);
         map = new ArcGISMap(basemap);
         mapview.setMap(map);
-
+        mapview.addMapScaleChangedListener(new MapScaleChangedListener() {
+            @Override
+            public void mapScaleChanged(MapScaleChangedEvent mapScaleChangedEvent) {
+                scale = mapview.getMapScale();
+            }
+        });
         moveToMyLocation();
     }
 
@@ -185,7 +190,7 @@ public class MapviewActivity extends AppCompatActivity {
                 longitude = Double.parseDouble(sp[1]);
 
 
-                mapview.setViewpointAsync(new Viewpoint(latitude, longitude, mapview.getMapScale()),0.2f).addDoneListener(new Runnable() {
+                mapview.setViewpointAsync(new Viewpoint(latitude, longitude, mapview.getMapScale()), 0.2f).addDoneListener(new Runnable() {
                     @Override
                     public void run() {
                         showPopup(pointString);
@@ -203,8 +208,13 @@ public class MapviewActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * 利用CoordinateFormatter获取真实地理坐标进行字符串分割
+     * @param pointString
+     * @return
+     */
     public String[] splitPoint(String pointString) {
-        pointString = pointString.replace("N", "").replace("S", "").replace("E", "").replace("S", "");
+        pointString = pointString.replace("N", "").replace("S", "").replace("E", "").replace("W", "");
         Log.d(TAG, "splitPoint() returned: " + pointString);
         String[] ss = pointString.split(" ");
         return ss;
@@ -263,11 +273,15 @@ public class MapviewActivity extends AppCompatActivity {
         mapview.getGraphicsOverlays().add(graphicsOverlay);
     }
 
+    /**
+     * 获取屏幕中心点的mapview地理坐标
+     *
+     * @return
+     */
     private Point getCenterPoint() {
         DisplayMetrics dm = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(dm);
         android.graphics.Point point = new android.graphics.Point(dm.widthPixels / 2, dm.heightPixels / 2);
-        Log.d(TAG, "getCenterPoint() returned: " + point);
         Point realPoint = mapview.screenToLocation(point);
         Log.d(TAG, "getCenterPoint() returned: " + realPoint);
         return realPoint;
@@ -338,8 +352,6 @@ public class MapviewActivity extends AppCompatActivity {
             public void run() {
                 //调用百度api获取坐标详细信息
                 try {
-//                    Log.i(TAG, "run() returned: current " + latitudeTemp + " " + longitudeTemp + "\n" +
-//                            latitude + " " + longitude);
                     double y = 1;
                     double x = 1;
                     Log.d(TAG, "run() returned:last " + lastLatitude + "\n now" + latitude);
@@ -355,7 +367,7 @@ public class MapviewActivity extends AppCompatActivity {
                     } else {
                         lastLatitude = Double.valueOf(latitude);
                         lastLongitude = Double.valueOf(longitude);
-                        bean=null;
+                        bean = null;
                         geoDetailInfo = UrlUtils.sendGetRequest(ContextData.bdGeoUrl
                                 .replace("666", ContextData.a)
                                 .replace("latitude", latitude.toString())
@@ -365,18 +377,15 @@ public class MapviewActivity extends AppCompatActivity {
                             bean = gson.fromJson(geoDetailInfo, BaiduGeo.class);
                         } catch (Exception e) {
                             e.printStackTrace();
-                            bean=null;
+                            bean = null;
                         }
                         Log.d(TAG, "run() returned: " + geoDetailInfo);
                     }
-//
-//                    lastLatitude=latitude;
-//                    lastLongitude=longitude;
 
                     new Handler(getMainLooper()).post(new Runnable() {
                         @Override
                         public void run() {
-                            if (tv2 != null&&bean!=null) {
+                            if (tv2 != null && bean != null) {
                                 StringBuffer stringBuffer = new StringBuffer();
                                 stringBuffer.append(bean.getResult().getFormatted_address() + " " + bean.getResult().getBusiness());
                                 if (bean.getResult().getPois().size() > 0) {//取出百度数据中附近第一个地址
@@ -397,6 +406,17 @@ public class MapviewActivity extends AppCompatActivity {
         thread.start();
 
     }
+
+    public boolean moveToMyLocation() {
+        Location location = LocationUtils.getLocation(context);
+        if (location == null) {
+            ToastUtils.show("位置获取失败");
+            return false;
+        }
+        changeViewpoint(location.getLatitude(), location.getLongitude());
+        return true;
+    }
+
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -455,21 +475,11 @@ public class MapviewActivity extends AppCompatActivity {
     @OnClick(R.id.btn_locate)
     public void onBtnLocateClicked() {//定位到本机位置
         moveToMyLocation();
-
     }
 
-    public boolean moveToMyLocation(){
-        Location location = LocationUtils.getLocation(context);
-        if (location == null) {
-            ToastUtils.show("位置获取失败");
-            return false;
-        }
-        changeViewpoint(location.getLatitude(), location.getLongitude());
-        return true;
-    }
 
     @OnClick(R.id.btn_add)
-    public void onBtnAddClicked() {
+    public void onBtnAddClicked() {//放大
         scale = mapview.getMapScale();
         scale /= 2;
         mapview.setViewpointScaleAsync(scale);
