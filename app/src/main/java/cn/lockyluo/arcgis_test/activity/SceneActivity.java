@@ -39,6 +39,7 @@ import com.esri.arcgisruntime.mapping.view.SceneView;
 import com.esri.arcgisruntime.symbology.SimpleMarkerSymbol;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 
 import java.io.File;
 
@@ -87,6 +88,9 @@ public class SceneActivity extends AppCompatActivity {
     private BaiduGeo bean;
     private Geo lastGeo;
     private Geo currentGeo;
+
+    private Double lastLatitude;
+    private Double lastLongitude;
 
 
     @Override
@@ -137,14 +141,15 @@ public class SceneActivity extends AppCompatActivity {
 
                 android.graphics.Point screenPoint = new android.graphics.Point(Math.round(motionEvent.getX()), Math.round(motionEvent.getY()));
                 final Point point = sceneview.screenToBaseSurface(screenPoint);
-                String s = CoordinateFormatter.toLatitudeLongitude(point, CoordinateFormatter.LatitudeLongitudeFormat.DECIMAL_DEGREES, 4);
+                final String pointString = CoordinateFormatter.toLatitudeLongitude(point, CoordinateFormatter.LatitudeLongitudeFormat.DECIMAL_DEGREES, 4);
 
 
-                showPopup(s);
+
 
                 sceneview.setViewpointAsync(new Viewpoint(point.getY(), point.getX(), scale),0.3f).addDoneListener(new Runnable() {
                     @Override
                     public void run() {
+                        showPopup(pointString);
                         addPointToSurfaceView(point);
 
                     }
@@ -373,17 +378,16 @@ public class SceneActivity extends AppCompatActivity {
                 //调用百度api获取坐标详细信息
                 try {
                     Geo geo = getCurrentGeoPoint();
-                    Double latitudeTemp = geo.getTargetGeometry().getY();
-                    Double longitudeTemp = geo.getTargetGeometry().getX();
-                    latitude = latitudeTemp;
-                    longitude = longitudeTemp;
+                    latitude = geo.getTargetGeometry().getY();
+                    longitude = geo.getTargetGeometry().getX();
+
 //                    Log.i(TAG, "run() returned: current " + latitudeTemp + " " + longitudeTemp + "\n" +
 //                            latitude + " " + longitude);
-                    double y = 0;
-                    double x = 0;
-                    if (lastGeo != null) {
-                        y = latitudeTemp - lastGeo.getTargetGeometry().getY();
-                        x = longitudeTemp - lastGeo.getTargetGeometry().getX();
+                    double y = 1;
+                    double x = 1;
+                    if (lastLatitude != null) {
+                        y = latitude - lastLatitude;
+                        x = longitude - lastLongitude;
                     }
 
                     if (Math.pow(y, 2) < 0.000001 &&
@@ -391,17 +395,20 @@ public class SceneActivity extends AppCompatActivity {
                             bean != null) {
                         Log.i(TAG, "run: show cache last geo");//坐标变化较小时跳过访问百度api，直接显示缓存
                     } else {
+                        lastLatitude = Double.valueOf(latitude);
+                        lastLongitude = Double.valueOf(longitude);
+                        bean=null;
                         geoDetailInfo = UrlUtils.sendGetRequest(ContextData.bdGeoUrl
                                 .replace("666", ContextData.a)
                                 .replace("latitude", latitude.toString())
                                 .replace("longitude", longitude.toString()));
 
-                        bean = gson.fromJson(geoDetailInfo, BaiduGeo.class);
-                    }
-
-                    if (currentGeo != null) {
-                        lastGeo = new Geo();
-                        lastGeo.setTargetGeometry(currentGeo.getTargetGeometry());
+                        try {
+                            bean = gson.fromJson(geoDetailInfo, BaiduGeo.class);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            bean=null;
+                        }
                     }
 
                     new Handler(getMainLooper()).post(new Runnable() {
